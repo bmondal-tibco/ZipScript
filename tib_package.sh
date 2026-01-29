@@ -2,7 +2,7 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: $0 <target_directory> [zip_file_name.zip or *]"
+  echo "Usage: $0 <target> [zip_file_name.zip or *]"
   exit 1
 }
 
@@ -10,10 +10,10 @@ DEFAULT_ZIP_NAME="tib_package.zip"
 
 # Argument parsing with literal '*' detection
 if [ "$#" -eq 1 ]; then
-  TARGET_DIR="$1"
+  TARGET="$1"
   ZIPFILE_NAME="$DEFAULT_ZIP_NAME"
 elif [ "$#" -eq 2 ]; then
-  TARGET_DIR="$1"
+  TARGET="$1"
   if [ "$2" = "*" ]; then
     ZIPFILE_NAME="$DEFAULT_ZIP_NAME"
   else
@@ -24,48 +24,57 @@ else
 fi
 
 # Interpret "." as current directory
-if [ "$TARGET_DIR" = "." ]; then
-  TARGET_DIR="$(pwd)"
+if [ "$TARGET" = "." ]; then
+  TARGET="$(pwd)"
 fi
 
-# Validate directory
-if [ ! -d "$TARGET_DIR" ]; then
-  echo "Error: '$TARGET_DIR' is not a directory."
+# Validate the target (file or directory)
+if [ ! -e "$TARGET" ]; then
+  echo "Error: '$TARGET' does not exist."
   exit 1
 fi
 
 # Resolve absolute paths
-TARGET_DIR_ABS=$(cd "$TARGET_DIR" && pwd)
-ZIPFILE_PATH="$TARGET_DIR_ABS/$ZIPFILE_NAME"
+TARGET_ABS=$(realpath "$TARGET")
+ZIPFILE_PATH="$(dirname "$TARGET_ABS")/$ZIPFILE_NAME"
 SCRIPT_PATH_ABS=$(readlink -f "$0")
 SCRIPT_NAME=$(basename "$SCRIPT_PATH_ABS")
 
-# Change into target directory
-cd "$TARGET_DIR_ABS"
+# Check if a file or directory needs to be zipped
+if [ -f "$TARGET_ABS" ]; then
+  # If a single file, zip that directly
+  ITEMS_TO_ZIP=("$TARGET_ABS")
+elif [ -d "$TARGET_ABS" ]; then
+  # If a directory, change into that directory
+  cd "$TARGET_ABS"
+  
+  # Check for any files (including hidden) using globbing options
+  shopt -s nullglob dotglob
+  all_items=(*)
+  shopt -u nullglob dotglob
+  if [ "${#all_items[@]}" -eq 0 ]; then
+    echo "Warning: no files/folders inside '$TARGET_ABS'. Nothing to zip."
+    exit 0
+  fi
 
-# Check for any files (including hidden) using globbing options
-shopt -s nullglob dotglob
-all_items=(*)
-shopt -u nullglob dotglob
-if [ "${#all_items[@]}" -eq 0 ]; then
-  echo "Warning: no files/folders inside '$TARGET_DIR_ABS'. Nothing to zip."
-  exit 0
-fi
+  # Create array of items to zip, excluding script and zip file
+  mapfile -t ITEMS_TO_ZIP < <(
+    find . -mindepth 1 \
+      ! -name "$ZIPFILE_NAME" \
+      ! -name "$SCRIPT_NAME"
+  )
 
-# Build list to include, excluding script and zip file
-mapfile -t to_zip < <(
-  find . -mindepth 1 \
-    ! -name "$ZIPFILE_NAME" \
-    ! -name "$SCRIPT_NAME"
-)
-
-if [ "${#to_zip[@]}" -eq 0 ]; then
-  echo "Warning: nothing to zip after exclusions."
-  exit 0
+  if [ "${#ITEMS_TO_ZIP[@]}" -eq 0 ]; then
+    echo "Warning: nothing to zip after exclusions."
+    exit 0
+  fi
+else
+  echo "Error: '$TARGET' is neither a file nor a directory."
+  exit 1
 fi
 
 # Create zip quietly and recursively
-zip -r -q "$ZIPFILE_NAME" "${to_zip[@]}"
+zip -r -q "$ZIPFILE_PATH" "${ITEMS_TO_ZIP[@]}"
 
 if [ $? -eq 0 ]; then
   echo "Zip created: '$ZIPFILE_PATH'"
@@ -74,4 +83,5 @@ else
   echo "Error: zip failed."
   exit 1
 fi
+
 
