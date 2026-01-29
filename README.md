@@ -30,6 +30,9 @@ To use the script, follow these steps:
 | `./tib_package.sh dir`        | Zips the contents of the specified directory into a default zip file named `tib_package.zip`. |
 | `./tib_package.sh dir '*'`    | Zips the contents of the specified directory into `custom.zip`, where explicit `*` defaults to `tib_package.zip`. |
 | `./tib_package.sh dir custom.zip` | Zips the contents of the specified directory into `custom.zip`.                          |
+| `unzip example.zip`                            | Unzips the contents of `example.zip` into the current directory.                                                    |
+| `unzip example.zip -d /path/to/directory`     | Unzips the contents of `example.zip` into the specified target directory at `/path/to/directory`.                   |
+
 
 ## Requirements
 
